@@ -5,12 +5,23 @@ import { AddPropertyModal } from '../components/AddPropertyModal';
 import { RecordPaymentModal } from '../components/RecordPaymentModal';
 import { EmptyState } from '../components/EmptyState';
 import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  Cell,
+  Legend
+} from 'recharts';
+import {
   Building2,
   Plus,
   TrendingUp,
   AlertCircle,
   FileSpreadsheet,
-  PieChart,
+  PieChart as PieChartIcon,
   UserCheck,
   Send,
   CheckCircle2,
@@ -176,6 +187,83 @@ export const LandlordDashboardScreen: React.FC<LandlordDashboardScreenProps> = (
                   {tenants.filter((t) => t.arrears > 0).length} tenants overdue
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* Unit Occupancy Chart */}
+          <div id="unit-occupancy-chart-section" className="bg-white rounded-3xl p-6 border border-[#DFE8E3] shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="font-black text-sm text-[#17231E] flex items-center gap-2">
+                  <PieChartIcon className="w-4 h-4 text-[#0AB77F]" />
+                  <span>Unit Occupancy Across Owned Properties</span>
+                </h3>
+                <p className="text-xs text-[#65766F]">
+                  Occupied vs. Vacant unit distribution filtered strictly by your property ownership
+                </p>
+              </div>
+              <div className="text-xs font-extrabold text-[#0AB77F] bg-[#0AB77F]/10 px-3 py-1 rounded-xl">
+                {properties.reduce((sum, p) => sum + p.totalUnits, 0)} Total Units
+              </div>
+            </div>
+
+            <div className="h-64 w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={properties.map((prop) => {
+                    const propTenants = tenants.filter(
+                      (t) => t.propertyName === prop.name || t.propertyId === prop.id
+                    );
+                    const total = prop.totalUnits || 1;
+                    const occupied = Math.min(propTenants.length, total);
+                    const vacant = Math.max(0, total - occupied);
+                    const occupancyRate = Math.round((occupied / total) * 100);
+                    return {
+                      name: prop.name,
+                      occupied,
+                      vacant,
+                      totalUnits: total,
+                      occupancyRate,
+                    };
+                  })}
+                  margin={{ top: 10, right: 30, left: 0, bottom: 25 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F0F4F2" />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fill: '#65766F', fontSize: 11, fontWeight: 700 }}
+                    interval={0}
+                    angle={-15}
+                    textAnchor="end"
+                  />
+                  <YAxis
+                    tick={{ fill: '#65766F', fontSize: 11 }}
+                    allowDecimals={false}
+                  />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-[#101915] text-white p-3 rounded-2xl text-xs space-y-1 shadow-lg border border-white/10">
+                            <p className="font-black text-[#62E3B6]">{label}</p>
+                            <p>Occupied Units: <span className="font-bold text-white">{data.occupied}</span></p>
+                            <p>Vacant Units: <span className="font-bold text-white">{data.vacant}</span></p>
+                            <p>Total Units: <span className="font-bold text-white">{data.totalUnits}</span></p>
+                            <p className="text-[#62E3B6] font-extrabold pt-1 border-t border-white/10">
+                              Occupancy Rate: {data.occupancyRate}%
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                  <Bar dataKey="occupied" name="Occupied Units" fill="#0AB77F" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="vacant" name="Vacant Units" fill="#DFE8E3" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
 

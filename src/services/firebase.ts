@@ -6,6 +6,8 @@ import {
   browserSessionPersistence,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -54,6 +56,11 @@ export const getActiveFirebaseConfig = (): FirebaseAppConfig => {
     };
   }
 
+  // In production mode, warn if falling back to test template config
+  if (env.PROD) {
+    console.warn('CRITICAL: Missing VITE_FIREBASE_API_KEY or VITE_FIREBASE_PROJECT_ID in production environment. Falling back to template configuration.');
+  }
+
   const fallback = defaultAppletConfig as Partial<FirebaseAppConfig>;
   return {
     apiKey: fallback.apiKey || '',
@@ -73,12 +80,18 @@ export const getFirebaseConfigStatus = () => {
   if (!config.authDomain) missing.push('VITE_FIREBASE_AUTH_DOMAIN');
   if (!config.projectId) missing.push('VITE_FIREBASE_PROJECT_ID');
   if (!config.appId) missing.push('VITE_FIREBASE_APP_ID');
+  if (!config.storageBucket) missing.push('VITE_FIREBASE_STORAGE_BUCKET');
+
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isProd = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PROD;
 
   return {
     isConfigured: missing.length === 0,
     projectId: config.projectId,
     authDomain: config.authDomain,
     missingKeys: missing,
+    currentHost,
+    isProd,
   };
 };
 
@@ -225,12 +238,14 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        // Try getting token if available or notify failure
-        if (onAuthFailure) onAuthFailure();
+      if (!cachedAccessToken) {
+        try {
+          cachedAccessToken = await user.getIdToken() || user.refreshToken || 'firebase-restored-session';
+        } catch {
+          cachedAccessToken = user.refreshToken || 'firebase-restored-session';
+        }
       }
+      if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
     } else {
       cachedAccessToken = null;
       if (onAuthFailure) onAuthFailure();
@@ -247,9 +262,32 @@ const signInWithGoogleProvider = async (provider: GoogleAuthProvider): Promise<{
 
   isSigningIn = true;
   try {
-    const result = await signInWithPopup(auth, provider);
+    const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    let result;
+    try {
+      result = await signInWithPopup(auth, provider);
+    } catch (popupErr: any) {
+      // If popup is blocked or on mobile where popup might fail, fallback or rethrow cleanly
+      if (isMobile || popupErr?.code === 'auth/popup-blocked' || popupErr?.code === 'auth/popup-closed-by-user') {
+        try {
+          await signInWithRedirect(auth, provider);
+          const redirectResult = await getRedirectResult(auth);
+          if (redirectResult && redirectResult.user) {
+            result = redirectResult;
+          } else {
+            throw popupErr;
+          }
+        } catch (redirectErr) {
+          throw popupErr;
+        }
+      } else {
+        throw popupErr;
+      }
+    }
+
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    cachedAccessToken = credential?.accessToken || '';
+    cachedAccessToken = credential?.accessToken || await result.user.getIdToken() || '';
     return { user: result.user, accessToken: cachedAccessToken };
   } finally {
     isSigningIn = false;

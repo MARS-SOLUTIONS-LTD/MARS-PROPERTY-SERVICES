@@ -451,11 +451,11 @@ export const MarsProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (storedUser && storedUser.id === firebaseUser.uid) {
             setCurrentUser(storedUser);
           } else {
-            // Check if user email matches pre-provisioned Tenant or Manager
+            // Check if user email matches pre-provisioned Tenant or Manager, otherwise default to TENANT (preventing automatic LANDLORD role escalation)
             const userEmail = (firebaseUser.email || '').toLowerCase();
             const matchedTenant = userEmail ? tenants.find((t) => t.email && t.email.toLowerCase() === userEmail) : undefined;
             const matchedManager = userEmail ? managers.find((m) => m.email && m.email.toLowerCase() === userEmail) : undefined;
-            const resolvedRole: UserRoleKey = matchedTenant ? 'TENANT' : matchedManager ? 'MANAGER' : 'LANDLORD';
+            const resolvedRole: UserRoleKey = matchedTenant ? 'TENANT' : matchedManager ? 'MANAGER' : 'TENANT';
 
             const now = Date.now();
             const roleAssignment: RoleAssignment = {
@@ -695,10 +695,10 @@ export const MarsProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: fbUser.email || userFromFirestore.email || cleanEmail,
         };
       } else {
-        // Resolve role: check if invited tenant or manager
+        // Resolve role: check if invited tenant or manager, otherwise default to TENANT
         const matchedTenant = tenants.find((t) => t.email && t.email.toLowerCase() === cleanEmail.toLowerCase());
         const matchedManager = managers.find((m) => m.email && m.email.toLowerCase() === cleanEmail.toLowerCase());
-        const resolvedRole: UserRoleKey = matchedTenant ? 'TENANT' : matchedManager ? 'MANAGER' : 'LANDLORD';
+        const resolvedRole: UserRoleKey = matchedTenant ? 'TENANT' : matchedManager ? 'MANAGER' : 'TENANT';
 
         const now = Date.now();
         const roleAssignment: RoleAssignment = {
@@ -772,7 +772,7 @@ export const MarsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const cleanEmail = (fbUser.email || '').toLowerCase();
         const matchedTenant = cleanEmail ? tenants.find((t) => t.email && t.email.toLowerCase() === cleanEmail) : undefined;
         const matchedManager = cleanEmail ? managers.find((m) => m.email && m.email.toLowerCase() === cleanEmail) : undefined;
-        const resolvedRole: UserRoleKey = matchedTenant ? 'TENANT' : matchedManager ? 'MANAGER' : 'LANDLORD';
+        const resolvedRole: UserRoleKey = matchedTenant ? 'TENANT' : matchedManager ? 'MANAGER' : 'TENANT';
 
         const now = Date.now();
         const roleAssignment: RoleAssignment = {
@@ -1038,11 +1038,11 @@ export const MarsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Role resolution with strict escalation defense:
-    // Check if the registering email was pre-provisioned by a landlord as a Manager or Tenant.
-    // If not, default to LANDLORD. Ordinary users cannot register as ADMIN or FOUNDER.
+    // Check if the registering email was pre-provisioned by a landlord as a Manager or Tenant,
+    // or if the user explicitly registers with property ownership intent. Otherwise default to TENANT.
     const matchedTenant = tenants.find((t) => t.email && t.email.toLowerCase() === cleanEmail.toLowerCase());
     const matchedManager = managers.find((m) => m.email && m.email.toLowerCase() === cleanEmail.toLowerCase());
-    const assignedRole: UserRoleKey = matchedTenant ? 'TENANT' : matchedManager ? 'MANAGER' : 'LANDLORD';
+    const assignedRole: UserRoleKey = matchedTenant ? 'TENANT' : matchedManager ? 'MANAGER' : (data.propertyName && data.propertyName.trim() ? 'LANDLORD' : 'TENANT');
 
     try {
       const firebaseUser = await emailSignUp(cleanEmail, data.password, shouldRemember);

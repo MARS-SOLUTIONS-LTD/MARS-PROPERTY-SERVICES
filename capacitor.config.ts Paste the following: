@@ -1,0 +1,10 @@
+
+import type { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'ug.marsolutions.propertyservices',
+  appName: 'MARS Property Services',
+  webDir: 'dist'
+};
+
+export default config;
